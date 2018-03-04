@@ -5,7 +5,7 @@ response = vkstreaming.getServerUrl('3af6043f3af6043f3af6043f783aa93cb333af63af6
 api = Streaming(response["endpoint"], response["key"])
 
 api.del_all_rules()
-for line in open('/Users/martikvm/PycharmProjects/DoubleSearch/popular_words_100_1'):
+for line in open('/Users/martikvm/PycharmProjects/DoubleSearch/popular_words_100_1.txt'):
     api.add_rules(line.lower(), line)
 # api.add_rules('Сегодня', 'сегодня')
 
