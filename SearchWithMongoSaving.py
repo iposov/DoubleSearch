@@ -2,11 +2,14 @@ from twython import TwythonStreamer
 import datetime
 import logging
 from pymongo import MongoClient
+import sys
 
-APP_KEY = '32z3PM3ONqnCK6GKNZG5nn2a0'
-APP_SECRET = 'LGEKF2o9YV8ppfUTxPe525VudHHJR7UkynSd8wbycDV69dhtGf'
-OAUTH_TOKEN = '577060724-UmUdd7novSznvbZtke5KEEeEVpywxNGTBJM8dGma'
-OAUTH_TOKEN_SECRET = 'i9Eq8kux7GGvntjphv1ZHchdhwchAci7J4wmrylYlfFHh'
+keyPath = '/Users/martikvm/PycharmProjects/DoubleSearch/credentialsTwitter.txt'
+keyFile = open(keyPath, 'r')
+APP_KEY = keyFile.readline()
+APP_SECRET = keyFile.readline()
+OAUTH_TOKEN = keyFile.readline()
+OAUTH_TOKEN_SECRET = keyFile.readline()
 
 handler = logging.FileHandler('pyMongo.log')
 handler.setLevel(logging.WARNING)
@@ -15,7 +18,11 @@ handler.setFormatter(formatter)
 logger = logging.getLogger('myLogger')
 logger.addHandler(handler)
 
-client = MongoClient("mongodb+srv://vera_martina:Siol-3917@doublesearchintwitter-m3qge.mongodb.net/tweets")
+credPath = '/Users/martikvm/PycharmProjects/DoubleSearch/credentialsMongo.txt'
+credFile = open(credPath, 'r')
+loginMA = credFile.readline()
+passwordMA = credFile.readline()
+client = MongoClient("mongodb+srv://{}:{}@doublesearchintwitter-m3qge.mongodb.net/tweets".format(loginMA, passwordMA))
 db = client.twitter_database
 tweets = db.tweets
 tweets.delete_many({})
@@ -23,6 +30,9 @@ tweets.delete_many({})
 class MyStreamer(TwythonStreamer):
 
     def on_success(self, data):
+        if datetime.datetime.now().day == 8 and datetime.datetime.now().hour == 14 and datetime.datetime.now().minute == 4:
+            logger.warning('Сбор твитов окончен.')
+            sys.exit('Сбор твитов окончен.')
         if 'text' in data and data['lang'] == 'ru':
             try:
                 data['retweeted_status']
