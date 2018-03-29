@@ -3,6 +3,7 @@ import datetime
 import logging
 from pymongo import MongoClient
 import sys
+import urllib.parse
 
 keyPath = '/Users/martikvm/PycharmProjects/DoubleSearch/credentialsTwitter.txt'
 keyFile = open(keyPath, 'r')
@@ -20,12 +21,16 @@ logger.addHandler(handler)
 
 credPath = '/Users/martikvm/PycharmProjects/DoubleSearch/credentialsMongo.txt'
 credFile = open(credPath, 'r')
-loginMA = credFile.readline()
-passwordMA = credFile.readline()
-client = MongoClient("mongodb+srv://{}:{}@doublesearchintwitter-m3qge.mongodb.net/tweets".format(loginMA, passwordMA))
+loginMA = urllib.parse.quote_plus(credFile.readline().strip())
+passwordMA = urllib.parse.quote_plus(credFile.readline()).strip()
+client = MongoClient("mongodb+srv://" +
+                     loginMA + ":" +
+                     passwordMA +
+                     "@doublesearchintwitter-m3qge.mongodb.net")
+db = client.twitter_database
 db = client.twitter_database
 tweets = db.tweets
-tweets.delete_many({})
+# tweets.delete_many({})
 
 class MyStreamer(TwythonStreamer):
 
