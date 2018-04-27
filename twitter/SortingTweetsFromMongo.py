@@ -1,9 +1,7 @@
 import logging
 from pymongo import MongoClient
 import pymongo
-import json
 import urllib.parse
-from bson import Binary, Code
 from bson.json_util import dumps
 
 handler = logging.FileHandler('sortMongo.log')
@@ -23,20 +21,23 @@ client = MongoClient("mongodb+srv://" +
                      "@doublesearchintwitter-m3qge.mongodb.net")
 db = client.twitter_database
 tweets = db.tweets
+print(client.database_names())
 logger.warning('Подключено к MongoDB.')
 
-print(client.database_names())
 tweets.create_index([("text", pymongo.ASCENDING)])
-# pipeline = [
-#     {"$group": {"_id": "$text", "count": {"$sum": 1}, "authors": {"$addToSet": "$user"}}},
-#    {"$match": {"count": {"$gt": 1}}}
-#]
-# doublesTweets = tweets.aggregate(pipeline, {'allowDiskUse': 'true'})
 line = ""
-with open("/Users/martikvm/PycharmProjects/DoubleSearch/doubleTweetsFromMongo.txt", "w") as output:
-    for doc in tweets.find().sort("text", 1):
-        if line != doc["text"]:
-            line = doc["text"]
-            print(doc)
-            output.write(dumps(doc))
-            output.write("\n")
+countDoubles = 0
+with open("/Users/martikvm/PycharmProjects/DoubleSearch/singleTweetsFromMongo.txt", "w") as output:
+    with open("/Users/martikvm/PycharmProjects/DoubleSearch/doubleTweetsFromMongo.txt", "w") as doublesOutput:
+        for doc in tweets.find().sort("text", 1):
+            if line != doc["text"]:
+                if countDoubles > 0:
+                    doublesOutput.write(dumps(line, ensure_ascii=False))
+                    doublesOutput.write("\n" + str(countDoubles + 1) + "\n\n")
+                    countDoubles = 0
+                line = doc["text"]
+                print(doc)
+                output.write(dumps(doc, ensure_ascii=False))
+                output.write("\n")
+            else:
+                countDoubles += 1
