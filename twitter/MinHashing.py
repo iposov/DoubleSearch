@@ -2,6 +2,12 @@ from pyspark.ml.feature import Word2Vec
 from pyspark.sql import SparkSession
 from pymongo import MongoClient
 import urllib.parse
+import pyspark.sql.functions as sqlf
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import MinHashLSH, NGram, Tokenizer, CountVectorizer
+from pyspark.sql.functions import col
+from pyspark.sql.functions import udf
+from pyspark.sql.types import IntegerType
 
 import os
 
@@ -55,11 +61,6 @@ spark = SparkSession \
 #        oneTweet = re.sub("@(\S)+", "[user]", oneTweet)
 #        output.write('\n' + oneTweet + '\n')
 
-
-from pyspark.ml import Pipeline
-from pyspark.ml.feature import MinHashLSH, NGram, Tokenizer, CountVectorizer
-from pyspark.sql.functions import col
-
 df1 = spark.read.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/normalizedTweetsWithoutLinks.txt").limit(500)
 #df1 = spark.read.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/tweets_sample.txt")
 tokenizer = Tokenizer(inputCol="value", outputCol="words")
@@ -70,9 +71,6 @@ model = pipeline.fit(df1)
 df2 = model.transform(df1)
 df2.show()
 
-from pyspark.ml.linalg import Vectors, SparseVector
-from pyspark.sql.functions import udf
-from pyspark.sql.types import IntegerType
 
 def getsparsesize(v):
     return v.values.size
@@ -89,17 +87,22 @@ model2 = mh.fit(df2)
 transformed_df2 = model2.transform(df2NotNull)
 transformed_df2.show()
 
-########## Этот блок зависает
-#spark.sql("set spark.sql.shuffle.partitions=3");
 
-df_pairs = model2.approxSimilarityJoin(transformed_df2, transformed_df2, 0.4, distCol="JaccardDistance")
+def getHashColumns(df0, x):
+    sum_of_hashes = 0
+    for y in range(x, x + 4):
+        sum_of_hashes += int(df0[y][0])
+    return sum_of_hashes
 
-for row in df_pairs.limit(100).collect():
-    print(row.datasetA.value)
-    print(row.datasetB.value)
-    print(row.JaccardDistance)
-    print()
-#    .select(col("datasetA.value").alias("idA"),
-#            col("datasetB.value").alias("idB"),
-#            col("JaccardDistance")).show()
-#
+
+gethashsums_udf = udf(getHashColumns)
+for k in range(0, 128, 4):
+    df3 = transformed_df2.select("value", gethashsums_udf("hashes", sqlf.lit(k)).alias("hashes03")).groupBy(
+        "hashes03").agg(sqlf.count('*').alias("num_tweets"), sqlf.collect_list("value").alias("tweets_texts")).filter(
+        col("num_tweets") > 1)
+    with open('/Users/martikvm/PycharmProjects/DoubleSearch/twitter/resultsTweetsAlike.txt', 'a') as outf:
+        for row in df3.collect():
+            for oneTweet in row.tweets_texts:
+                outf.write(oneTweet + '\n')
+            outf.write(str(row.num_tweets))
+            outf.write('\n\n')
