@@ -10,6 +10,13 @@ from pyspark.sql.functions import udf
 from pyspark.sql.types import IntegerType
 
 import os
+import sys
+
+all_saved_tweets = '/Users/martikvm/PycharmProjects/DoubleSearch/twitter/all_tweets_from_mongo_2019'
+all_saved_tweets_file = '/Users/martikvm/PycharmProjects/DoubleSearch/twitter/normalizedTweetsWithoutLinks_2019.txt'
+normalized_file = '/Users/martikvm/PycharmProjects/DoubleSearch/twitter/normalizedTweetsWithoutLinks_2019_test.txt'
+results_file = '/Users/martikvm/PycharmProjects/DoubleSearch/twitter/resultsTweetsAlike_2019_test2.txt'
+
 
 # os.environ["SPARK_HOME"] = "/Applications/spark/spark-2.3.1-bin-hadoop2.7"
 os.environ["PYSPARK_PYTHON"] = "/Users/martikvm/anaconda3/envs/py35/bin/python"
@@ -35,34 +42,24 @@ spark = SparkSession \
     .config("spark.mongodb.input.uri", "mongodb+srv://" +
             loginMA + ":" +
             passwordMA +
-            "@doublesearchintwitter-m3qge.mongodb.net/twitter_database.tweets") \
+            "@doublesearchintwitter-m3qge.mongodb.net/twitter_march2019.tweets") \
     .getOrCreate()
 
-# df = spark.read.format("com.mongodb.spark.sql.DefaultSource").load()
-# df.printSchema()
-# df.select("text").write.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/all_tweets_from_mongo.txt")
-
-# spark = SparkSession \
-#    .builder \
-#    .master("local") \
-#    .appName("twitter") \
-#    .getOrCreate()
-#
-# df = spark.read.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/tweets_sample.txt")
-# df.printSchema()
+#df = spark.read.format("com.mongodb.spark.sql.DefaultSource").load()
+#df.printSchema()
+#df.select("text").write.text(all_saved_tweets)
 
 ############## Очистка твитов
-#import re
-#
-#with open('/Users/martikvm/PycharmProjects/DoubleSearch/twitter/normalizedTweetsWithoutLinks.txt', 'a') as output, open("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/all_tweets_from_mongo/part-00002-8f268b47-3135-4f42-921c-729e6860189b-c000.txt", "r") as input:
+import re
+
+#with open(normalized_file, 'a') as output, open(all_saved_tweets_file, "r") as input:
 #    print("Something")
 #    for tweet in input:
 #        oneTweet = re.sub("http(\S)+", "[link]", tweet)
 #        oneTweet = re.sub("@(\S)+", "[user]", oneTweet)
 #        output.write('\n' + oneTweet + '\n')
 
-df1 = spark.read.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/normalizedTweetsWithoutLinks.txt").limit(500)
-#df1 = spark.read.text("/Users/martikvm/PycharmProjects/DoubleSearch/twitter/tweets_sample.txt")
+df1 = spark.read.text(normalized_file)
 tokenizer = Tokenizer(inputCol="value", outputCol="words")
 ngram = NGram(n=1, inputCol="words", outputCol="ngrams")
 cv = CountVectorizer(inputCol="ngrams", outputCol="features")
@@ -87,6 +84,10 @@ model2 = mh.fit(df2)
 transformed_df2 = model2.transform(df2NotNull)
 transformed_df2.show()
 
+edges = []
+for k in range(0, transformed_df2.count()):
+    edges.append(k)
+print(edges)
 
 def getHashColumns(df0, x):
     sum_of_hashes = 0
@@ -96,13 +97,49 @@ def getHashColumns(df0, x):
 
 
 gethashsums_udf = udf(getHashColumns)
-for k in range(0, 128, 4):
-    df3 = transformed_df2.select("value", gethashsums_udf("hashes", sqlf.lit(k)).alias("hashes03")).groupBy(
-        "hashes03").agg(sqlf.count('*').alias("num_tweets"), sqlf.collect_list("value").alias("tweets_texts")).filter(
-        col("num_tweets") > 1)
-    with open('/Users/martikvm/PycharmProjects/DoubleSearch/twitter/resultsTweetsAlike.txt', 'a') as outf:
+
+with open(results_file, 'w') as outf:
+    for k in range(0, 128, 4):
+        print("k = ", k)
+        outf.write("============================\nk = " + str(k) + "\n============================\n")
+
+        df3 = transformed_df2.select("value", "id", gethashsums_udf("hashes", sqlf.lit(k)).alias("hashes03")).groupBy(
+            "hashes03").agg(sqlf.count('*').alias("num_tweets"), sqlf.collect_list("value").alias("tweets_texts"),
+                            sqlf.collect_list("id").alias("ids")).filter(
+            col("num_tweets") > 1)
+        df3.show()
+
+        new_colour = 1
+
+        for row in df3.select("ids").collect():
+            flag = True
+            print(row)
+            for id in row.ids:
+                to_change = []
+                if (flag):
+                    new_colour = id
+                    flag = False
+                    if (edges[id] != id):
+                        new_colour = edges[id]
+                else:
+                    to_change.append(edges[id])
+                edges[id] = new_colour
+                for i in range(0, len(edges)):
+                    if edges[i] == id:
+                        edges[i] = new_colour
+                for k in to_change:
+                    for i in range(0, len(edges)):
+                        if (edges[i] == k):
+                            edges[i] = new_colour
+
+        print(edges)
+
+        print('transformed')
+        print()
+
         for row in df3.collect():
             for oneTweet in row.tweets_texts:
                 outf.write(oneTweet + '\n')
             outf.write(str(row.num_tweets))
             outf.write('\n\n')
+
